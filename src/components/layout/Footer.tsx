@@ -5,6 +5,16 @@ import { Container } from '@/components/ui/Container';
 import { SocialLinks } from '@/components/ui/SocialLinks';
 
 export function Footer() {
+    const [currentYear, setCurrentYear] = React.useState<number>();
+
+    React.useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setCurrentYear(new Date().getFullYear());
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+    }, []);
+
     return (
         <footer className="w-full bg-surface border-t border-border-subtle mt-auto py-12">
             <Container>
@@ -49,7 +59,7 @@ export function Footer() {
                 </div>
 
                 <div className="pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-secondary-text gap-4">
-                    <p>© {new Date().getFullYear()} CSE Academic Portfolio. Built with Next.js & Supabase.</p>
+                    <p>© {currentYear ? `${currentYear} ` : ''}CSE Academic Portfolio. Built with Next.js & Supabase.</p>
                     <div className="flex items-center gap-4">
                         <Link href="/admin/login" className="hover:text-accent font-mono text-[11px] transition-colors">
                             [Admin Portal]
