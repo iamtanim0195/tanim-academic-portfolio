@@ -15,7 +15,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-background text-primary-text antialiased selection:bg-accent selection:text-background min-h-screen flex flex-col">
+      <body suppressHydrationWarning className="bg-background text-primary-text antialiased selection:bg-accent selection:text-background min-h-screen flex flex-col">
         <Navbar />
         <div className="flex-1">
           {children}
