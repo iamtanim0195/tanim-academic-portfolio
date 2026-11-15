@@ -31,19 +31,24 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser();
 
-    // Protect all /admin routes except /admin/login
+    const allowedAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+    const isAuthorizedAdmin =
+        Boolean(user) &&
+        (!allowedAdminEmail || user?.email?.toLowerCase() === allowedAdminEmail);
+
+    // Block unauthenticated or non-allowlisted users from /admin
     if (
-        !user &&
+        !isAuthorizedAdmin &&
         request.nextUrl.pathname.startsWith('/admin') &&
         !request.nextUrl.pathname.startsWith('/admin/login')
     ) {
         const url = request.nextUrl.clone();
-        url.pathname = '/admin/login';
+        url.pathname = user ? '/' : '/admin/login';
         return NextResponse.redirect(url);
     }
 
-    // Redirect authenticated user away from login page to dashboard
-    if (user && request.nextUrl.pathname.startsWith('/admin/login')) {
+    // Redirect authorized admin away from login page
+    if (isAuthorizedAdmin && request.nextUrl.pathname.startsWith('/admin/login')) {
         const url = request.nextUrl.clone();
         url.pathname = '/admin';
         return NextResponse.redirect(url);
