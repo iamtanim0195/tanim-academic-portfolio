@@ -6,16 +6,18 @@ export const projectSchema = z.object({
         .string()
         .min(3, 'Slug is required')
         .regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens'),
-    summary: z.string().min(10, 'Summary must be at least 10 characters'),
-    researchProblem: z.string().optional(),
-    methodology: z.string().optional(),
+    summary: z.string().min(10, 'Short summary must be at least 10 characters'),
+    description: z.string().optional().default(''),
+    imageUrl: z.string().optional().default(''),
+    extraImageUrl: z.string().optional().default(''),
+    videoUrl: z.string().optional().default(''),
     technologies: z.string().transform((val) =>
         val
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
     ),
-    githubUrl: z.string().url('Invalid GitHub URL').optional().or(z.literal('')),
+    githubUrl: z.string().url('Invalid Code URL').optional().or(z.literal('')),
     demoUrl: z.string().url('Invalid Demo URL').optional().or(z.literal('')),
     paperUrl: z.string().url('Invalid Paper URL').optional().or(z.literal('')),
     isFeatured: z.boolean().default(false),
@@ -23,29 +25,25 @@ export const projectSchema = z.object({
 });
 
 export const publicationSchema = z.object({
-    title: z.string().min(5, 'Title is required'),
-    authors: z.string().transform((val) =>
-        val
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)
-    ),
-    venue: z.string().min(2, 'Venue is required'),
-    year: z.coerce.number().int().min(2000).max(2035),
-    doi: z.string().optional(),
-    paperUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
-    isFeatured: z.boolean().default(false),
-    published: z.boolean().default(false),
-});
-
-export const activitySchema = z.object({
-    title: z.string().min(3, 'Title is required'),
-    slug: z
+    title: z.string().min(3, 'Publication title must be at least 3 characters'),
+    description: z.string().optional().default(''),
+    paperUrl: z.string().url('Invalid link URL').optional().or(z.literal('')),
+    authors: z
         .string()
-        .min(3)
-        .regex(/^[a-z0-9-]+$/, 'Slug must be URL-safe'),
-    summary: z.string().min(10, 'Summary is required'),
-    content: z.string().optional(),
-    category: z.enum(['research_update', 'milestone', 'publication', 'achievement', 'learning']),
-    published: z.boolean().default(false),
+        .optional()
+        .default('')
+        .transform((val) =>
+            val
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+        ),
+    venue: z.string().optional().default(''),
+    year: z
+        .string()
+        .optional()
+        .default('')
+        .transform((val) => (val ? Number(val) : null)),
+    isFeatured: z.boolean().default(false),
+    published: z.boolean().default(true),
 });
