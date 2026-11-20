@@ -60,3 +60,16 @@ export const commentSchema = z.object({
     content: z.string().min(1, 'Comment cannot be empty').max(1000, 'Comment is too long'),
     honeypot: z.string().max(0, 'Spam detected').optional().default(''),
 });
+
+export const cvLinkSchema = z.object({
+    label: z.string().min(2, 'Label is required (e.g. Academic CV 2026)').max(100),
+    url: z.string().url('Please provide a valid URL or upload a PDF'),
+    setActive: z.boolean().default(true),
+});
+
+export const heroMediaSchema = z.object({
+    label: z.string().min(2, 'Label is required (e.g. Lab Portrait 2026)').max(100),
+    mediaType: z.enum(['image', 'video']),
+    url: z.string().url('Please provide a valid URL or upload a file'),
+    setActive: z.boolean().default(true),
+});

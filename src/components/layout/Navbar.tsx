@@ -28,7 +28,7 @@ export function Navbar() {
                         <Terminal size={18} />
                     </div>
                     <span className="font-mono text-sm font-bold tracking-tight text-primary-text group-hover:text-accent transition-colors">
-                        CSE<span className="text-accent">.Lab</span>
+                        Md.Sahadat Hossen Tanim
                     </span>
                 </Link>
 

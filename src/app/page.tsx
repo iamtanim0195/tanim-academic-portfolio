@@ -5,8 +5,31 @@ import { SectionHeading } from '@/components/ui/SectionHeading';
 import { SkillBadge } from '@/components/ui/SkillBadge';
 import { SocialLinks } from '@/components/ui/SocialLinks';
 import { Button } from '@/components/ui/Button';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { isAdminUser } from '@/lib/auth';
+import { ViewCvControl } from '@/components/home/ViewCvControl';
+import { HeroAvatarControl } from '@/components/home/HeroAvatarControl';
 
-export default function HomePage() {
+
+export default async function HomePage() {
+
+
+
+  const admin = await isAdminUser();
+  const supabase = await createServerSupabaseClient();
+
+  let cvQuery = supabase
+    .from('cv_links')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!admin) {
+    cvQuery = cvQuery.eq('is_active', true);
+  }
+
+
+  const { data: cvLinks } = await cvQuery;
+
   const researchDomains = [
     { title: 'Robotics', description: 'Autonomous navigation, kinematic modeling, and control systems.', icon: Bot },
     { title: 'Reinforcement Learning', description: 'Deep Q-learning, policy gradients, and multi-agent simulation.', icon: Brain },
@@ -15,6 +38,17 @@ export default function HomePage() {
   ];
 
   const sampleSkills = ['Python', 'C++', 'PyTorch', 'ROS2', 'OpenCV', 'TypeScript', 'Next.js', 'Linux', 'Git', 'Docker'];
+
+  let heroMediaQuery = supabase
+    .from('hero_media_items')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!admin) {
+    heroMediaQuery = heroMediaQuery.eq('is_active', true);
+  }
+
+  const { data: heroMediaItems } = await heroMediaQuery;
 
   return (
     <main className="py-12 space-y-20">
@@ -45,12 +79,7 @@ export default function HomePage() {
                     <ArrowRight size={18} />
                   </Button>
                 </Link>
-                <a href="#cv" download>
-                  <Button variant="outline" size="lg" className="gap-2">
-                    <Download size={18} />
-                    <span>View CV</span>
-                  </Button>
-                </a>
+                <ViewCvControl isAdmin={admin} cvLinks={cvLinks || []} />
               </div>
 
               <div className="pt-4 flex items-center gap-4">
@@ -61,13 +90,7 @@ export default function HomePage() {
 
             {/* Avatar Preview */}
             <div className="lg:col-span-5 flex justify-center">
-              <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-full border-2 border-accent/40 bg-surface flex items-center justify-center p-4 shadow-2xl">
-                <div className="w-full h-full rounded-full bg-background/80 border border-border-subtle flex flex-col items-center justify-center text-center p-6 space-y-2">
-                  <Bot size={48} className="text-accent animate-pulse" />
-                  <span className="font-mono text-xs text-secondary-text">[ Profile Photo / Video ]</span>
-                  <span className="text-[11px] text-accent font-mono">Hero Mode: Interactive</span>
-                </div>
-              </div>
+              <HeroAvatarControl isAdmin={admin} mediaItems={heroMediaItems || []} />
             </div>
 
           </div>
