@@ -9,6 +9,11 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { isAdminUser } from '@/lib/auth';
 import { ViewCvControl } from '@/components/home/ViewCvControl';
 import { HeroAvatarControl } from '@/components/home/HeroAvatarControl';
+import {
+  HeroBackgroundControl,
+  LibraryChoiceItem,
+} from '@/components/home/HeroBackgroundControl';
+
 
 
 export default async function HomePage() {
@@ -50,11 +55,79 @@ export default async function HomePage() {
 
   const { data: heroMediaItems } = await heroMediaQuery;
 
+  let heroBgQuery = supabase
+    .from('hero_bg_media')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!admin) {
+    heroBgQuery = heroBgQuery.eq('is_active', true);
+  }
+
+  const { data: heroBgItems } = await heroBgQuery;
+
+  let libraryItems: LibraryChoiceItem[] = [];
+  if (admin) {
+    const [{ data: assets }, { data: projects }] = await Promise.all([
+      supabase.from('media_assets').select('id, title, file_type, file_url'),
+      supabase.from('projects').select('id, title, image_url, extra_image_url, video_url'),
+    ]);
+
+    const fromAssets: LibraryChoiceItem[] = (assets || [])
+      .filter((a) => a.file_type === 'image' || a.file_type === 'video')
+      .map((a) => ({
+        id: `asset-${a.id}`,
+        label: a.title,
+        media_type: a.file_type as 'image' | 'video',
+        url: a.file_url,
+        sourceLabel: 'Media Library',
+      }));
+
+    const fromAvatars: LibraryChoiceItem[] = (heroMediaItems || []).map((h) => ({
+      id: `avatar-${h.id}`,
+      label: h.label,
+      media_type: h.media_type,
+      url: h.url,
+      sourceLabel: 'Hero Avatar',
+    }));
+
+    const fromProjects: LibraryChoiceItem[] = (projects || []).flatMap((p) => {
+      const list: LibraryChoiceItem[] = [];
+      if (p.image_url) {
+        list.push({
+          id: `proj-img-${p.id}`,
+          label: `${p.title} (Thumb)`,
+          media_type: 'image',
+          url: p.image_url,
+          sourceLabel: 'Project',
+        });
+      }
+      if (p.video_url) {
+        list.push({
+          id: `proj-vid-${p.id}`,
+          label: `${p.title} (Video)`,
+          media_type: 'video',
+          url: p.video_url,
+          sourceLabel: 'Project',
+        });
+      }
+      return list;
+    });
+
+    libraryItems = [...fromAssets, ...fromAvatars, ...fromProjects];
+  }
+
   return (
     <main className="py-12 space-y-20">
       {/* Hero Section Placeholder */}
-      <section className="py-8 sm:py-16">
-        <Container>
+      <section className="relative overflow-hidden py-12 sm:py-20 border-b border-border-subtle">
+        <HeroBackgroundControl
+          isAdmin={admin}
+          bgItems={heroBgItems || []}
+          libraryItems={libraryItems}
+        />
+        
+        <Container className="relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
             <div className="lg:col-span-7 space-y-6">
