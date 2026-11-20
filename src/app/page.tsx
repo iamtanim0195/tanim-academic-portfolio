@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
+import { connection } from 'next/server';
 import { ArrowRight, Download, BookOpen, Bot, Eye, Brain, Cpu, Sparkles } from 'lucide-react';
 import { Container } from '@/components/ui/Container';
 import { SectionHeading } from '@/components/ui/SectionHeading';
@@ -16,9 +18,28 @@ import {
 
 
 
-export default async function HomePage() {
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="py-12" aria-busy="true">
+          <Container>
+            <p className="text-sm text-secondary-text" role="status">
+              Loading portfolio...
+            </p>
+          </Container>
+        </main>
+      }
+    >
+      <HomePageContent />
+    </Suspense>
+  );
+}
+
+async function HomePageContent() {
 
 
+  await connection();
 
   const admin = await isAdminUser();
   const supabase = await createServerSupabaseClient();
@@ -64,7 +85,10 @@ export default async function HomePage() {
     heroBgQuery = heroBgQuery.eq('is_active', true);
   }
 
-  const { data: heroBgItems } = await heroBgQuery;
+  const { data: heroBgItems } = await supabase
+    .from('hero_bg_media')
+    .select('*')
+    .order('created_at', { ascending: true });
 
   let libraryItems: LibraryChoiceItem[] = [];
   if (admin) {
@@ -126,7 +150,7 @@ export default async function HomePage() {
           bgItems={heroBgItems || []}
           libraryItems={libraryItems}
         />
-        
+
         <Container className="relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 

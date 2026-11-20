@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Pencil,
@@ -14,15 +14,9 @@ import {
     Image as ImageIcon,
     Film,
     FolderOpen,
-    Eye,
-    EyeOff,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import {
-    addHeroBgAction,
-    toggleHeroBgActiveAction,
-    deleteHeroBgAction,
-} from '@/app/hero-bg-actions';
+import { addHeroBgAction, deleteHeroBgAction } from '@/app/hero-bg-actions';
 import { Button } from '@/components/ui/Button';
 
 export interface HeroBgItem {
@@ -30,7 +24,7 @@ export interface HeroBgItem {
     label: string;
     media_type: 'image' | 'video';
     url: string;
-    is_active: boolean;
+    is_active?: boolean;
     created_at: string;
 }
 
@@ -68,24 +62,56 @@ export function HeroBackgroundControl({
     const [labelInput, setLabelInput] = useState('');
     const [uploading, setUploading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [slideIndex, setSlideIndex] = useState(0);
+    const [currentIndex, setCurrentIndex] = useState(0);
     const [feedback, setFeedback] = useState<{
         type: 'success' | 'error';
         message: string;
     } | null>(null);
 
-    const activeItems = bgItems.filter((item) => item.is_active);
-    const activeVideo = activeItems.find((item) => item.media_type === 'video');
-    const activeImages = activeItems.filter((item) => item.media_type === 'image');
+    const ytIframeRef = useRef<HTMLIFrameElement | null>(null);
 
-    // Rotate through active background images every 6 seconds
+    const safeIndex = bgItems.length > 0 ? currentIndex % bgItems.length : 0;
+    const currentItem = bgItems.length > 0 ? bgItems[safeIndex] : null;
+
+    const advanceToNext = useCallback(() => {
+        if (bgItems.length <= 1) return;
+        setCurrentIndex((prev) => (prev + 1) % bgItems.length);
+    }, [bgItems.length]);
+
+    // 1. Image Timer: Stay for exactly 2 seconds, then advance to next item
     useEffect(() => {
-        if (activeVideo || activeImages.length <= 1) return;
-        const timer = setInterval(() => {
-            setSlideIndex((prev) => (prev + 1) % activeImages.length);
-        }, 6000);
-        return () => clearInterval(timer);
-    }, [activeVideo, activeImages.length]);
+        if (!currentItem || bgItems.length <= 1) return;
+        if (currentItem.media_type !== 'image') return;
+
+        const timer = setTimeout(() => {
+            advanceToNext();
+        }, 3000);
+
+        return () => clearTimeout(timer);
+    }, [currentItem, bgItems.length, advanceToNext]);
+
+    // 2. YouTube Embed Listener: Advance when YouTube iframe posts "ended" state (info === 0)
+    useEffect(() => {
+        if (!currentItem || currentItem.media_type !== 'video') return;
+        const ytId = extractYouTubeId(currentItem.url);
+        if (!ytId) return;
+
+        const handleMessage = (event: MessageEvent) => {
+            if (typeof event.data !== 'string') return;
+            try {
+                const data = JSON.parse(event.data);
+                // YouTube IFrame API sends info: 0 when video finishes
+                if (data.event === 'onStateChange' && data.info === 0) {
+                    advanceToNext();
+                }
+            } catch {
+                // Ignore non-JSON postMessages
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, [currentItem, advanceToNext]);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -115,7 +141,7 @@ export function HeroBackgroundControl({
             if (!labelInput) {
                 setLabelInput(file.name.replace(/\.[^/.]+$/, ''));
             }
-            setFeedback({ type: 'success', message: 'File uploaded! Click "Add to Hero Background".' });
+            setFeedback({ type: 'success', message: 'File uploaded! Click "Add to Loop".' });
         } catch (err: unknown) {
             setFeedback({
                 type: 'error',
@@ -132,6 +158,7 @@ export function HeroBackgroundControl({
         setFeedback(null);
 
         const formData = new FormData(e.currentTarget);
+        formData.set('setActive', 'on');
         const res = await addHeroBgAction(formData);
         setSaving(false);
 
@@ -142,28 +169,19 @@ export function HeroBackgroundControl({
 
         setLabelInput('');
         setUrlInput('');
-        setFeedback({ type: 'success', message: 'Hero background updated!' });
-        router.refresh();
-    };
-
-    const handleToggleActive = async (id: string, current: boolean) => {
-        setFeedback(null);
-        const res = await toggleHeroBgActiveAction(id, current);
-        if (res?.error) {
-            setFeedback({ type: 'error', message: res.error });
-            return;
-        }
+        setFeedback({ type: 'success', message: 'Added to Hero Background loop!' });
         router.refresh();
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Remove this background media item?')) return;
+        if (!window.confirm('Remove this media item from the loop?')) return;
         setFeedback(null);
         const res = await deleteHeroBgAction(id);
         if (res?.error) {
             setFeedback({ type: 'error', message: res.error });
             return;
         }
+        setCurrentIndex(0);
         router.refresh();
     };
 
@@ -173,58 +191,71 @@ export function HeroBackgroundControl({
         setMediaType(item.media_type);
         setFeedback({
             type: 'success',
-            message: `Selected "${item.label}" from Media Library. Click "Add to Hero Background" to apply.`,
+            message: `Selected "${item.label}". Click "Add to Loop" to include it.`,
         });
     };
 
     return (
         <>
-            {/* Background Media Layer (Sits behind Hero content) */}
+            {/* Background Sequential Playlist Layer */}
             <div aria-hidden="true" className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-                {activeVideo ? (
-                    (() => {
-                        const ytId = extractYouTubeId(activeVideo.url);
-                        if (ytId) {
+                {currentItem &&
+                    (currentItem.media_type === 'video' ? (
+                        (() => {
+                            const ytId = extractYouTubeId(currentItem.url);
+                            if (ytId) {
+                                return (
+                                    <iframe
+                                        key={currentItem.id}
+                                        ref={ytIframeRef}
+                                        src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&enablejsapi=1${bgItems.length === 1 ? `&loop=1&playlist=${ytId}` : ''
+                                            }`}
+                                        title={currentItem.label}
+                                        allow="autoplay; encrypted-media"
+                                        onLoad={() => {
+                                            // Subscribe to YouTube player state events so we detect when video finishes
+                                            ytIframeRef.current?.contentWindow?.postMessage(
+                                                JSON.stringify({ event: 'listening' }),
+                                                '*'
+                                            );
+                                        }}
+                                        className="w-full h-full object-cover scale-125 opacity-30"
+                                    />
+                                );
+                            }
+
                             return (
-                                <iframe
-                                    src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&showinfo=0&modestbranding=1`}
-                                    title={activeVideo.label}
-                                    allow="autoplay; encrypted-media"
-                                    className="w-full h-full object-cover scale-125 opacity-30"
+                                <video
+                                    key={currentItem.id}
+                                    src={currentItem.url}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    loop={bgItems.length === 1}
+                                    onEnded={advanceToNext}
+                                    onError={advanceToNext}
+                                    className="w-full h-full object-cover opacity-30"
                                 />
                             );
-                        }
-                        return (
-                            <video
-                                src={activeVideo.url}
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
-                                className="w-full h-full object-cover opacity-30"
-                            />
-                        );
-                    })()
-                ) : activeImages.length > 0 ? (
-                    activeImages.map((img, idx) => (
+                        })()
+                    ) : (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                            key={img.id}
-                            src={img.url}
+                            key={currentItem.id}
+                            src={currentItem.url}
                             alt=""
-                            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${idx === slideIndex % activeImages.length ? 'opacity-25' : 'opacity-0'
-                                }`}
+                            onError={advanceToNext}
+                            className="w-full h-full object-cover opacity-25 transition-opacity duration-500"
                         />
-                    ))
-                ) : null}
+                    ))}
 
                 {/* Readability Gradient Overlay */}
-                {(activeVideo || activeImages.length > 0) && (
+                {currentItem && (
                     <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/80 to-background" />
                 )}
             </div>
 
-            {/* Admin Floating Pencil Trigger for Hero Background */}
+            {/* Admin Floating Pencil Trigger */}
             {isAdmin && (
                 <button
                     type="button"
@@ -232,7 +263,7 @@ export function HeroBackgroundControl({
                         setFeedback(null);
                         setModalOpen(true);
                     }}
-                    title="Edit Hero Background Image / Video"
+                    title="Edit Hero Background Playlist"
                     className="absolute top-4 right-4 z-20 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-surface/90 backdrop-blur-md border border-accent/40 text-accent hover:bg-accent hover:text-accent-foreground text-xs font-mono shadow-lg transition-all"
                 >
                     <Pencil size={14} />
@@ -248,10 +279,10 @@ export function HeroBackgroundControl({
                         <div className="p-5 border-b border-border-subtle flex items-center justify-between">
                             <div>
                                 <h2 className="text-lg font-extrabold text-primary-text">
-                                    Hero Background Media
+                                    Hero Background Loop Playlist
                                 </h2>
                                 <p className="text-[11px] font-mono text-accent">
-                  // UPLOAD, PASTE LINK, PICK FROM LIBRARY & MANAGE ROTATION
+                  // ALL ITEMS PLAY SEQUENTIALLY (IMAGES: 2S • VIDEOS: FULL DURATION)
                                 </p>
                             </div>
                             <button
@@ -269,8 +300,8 @@ export function HeroBackgroundControl({
                             {feedback && (
                                 <div
                                     className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${feedback.type === 'success'
-                                            ? 'bg-accent/10 border-accent/40 text-accent'
-                                            : 'bg-red-900/20 border-red-500/40 text-red-400'
+                                        ? 'bg-accent/10 border-accent/40 text-accent'
+                                        : 'bg-red-900/20 border-red-500/40 text-red-400'
                                         }`}
                                 >
                                     {feedback.type === 'success' ? (
@@ -282,27 +313,24 @@ export function HeroBackgroundControl({
                                 </div>
                             )}
 
-                            {/* Previous History & Active Toggle */}
+                            {/* Playlist Items List */}
                             <div className="space-y-2.5">
                                 <h3 className="text-xs font-mono uppercase tracking-wider text-secondary-text">
-                                    Hero Background History ({bgItems.length}) — Active images rotate automatically
+                                    Loop Playlist ({bgItems.length} {bgItems.length === 1 ? 'item' : 'items'})
                                 </h3>
 
                                 {bgItems.length === 0 ? (
                                     <p className="p-4 rounded-xl bg-background/60 border border-border-subtle text-xs text-secondary-text text-center">
-                                        No background media set yet (currently solid dark charcoal). Add an image or video below.
+                                        No background media added yet. Add images or videos below to start the loop.
                                     </p>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        {bgItems.map((item) => (
+                                        {bgItems.map((item, idx) => (
                                             <div
                                                 key={item.id}
-                                                className={`p-3 rounded-xl border flex items-center gap-3 ${item.is_active
-                                                        ? 'bg-accent/5 border-accent/40'
-                                                        : 'bg-background/60 border-border-subtle opacity-75'
-                                                    }`}
+                                                className="p-3 rounded-xl border border-border-subtle bg-background/60 flex items-center gap-3"
                                             >
-                                                <div className="w-16 h-12 rounded-lg overflow-hidden bg-surface border border-border-subtle shrink-0 flex items-center justify-center">
+                                                <div className="w-16 h-12 rounded-lg overflow-hidden bg-surface border border-border-subtle shrink-0 flex items-center justify-center relative">
                                                     {item.media_type === 'image' ? (
                                                         // eslint-disable-next-line @next/next/no-img-element
                                                         <img
@@ -313,29 +341,24 @@ export function HeroBackgroundControl({
                                                     ) : (
                                                         <Film size={20} className="text-accent" />
                                                     )}
+                                                    <span className="absolute bottom-0.5 left-1 px-1 rounded bg-background/85 text-[9px] font-mono text-accent">
+                                                        #{idx + 1}
+                                                    </span>
                                                 </div>
 
                                                 <div className="min-w-0 flex-1 space-y-1">
                                                     <p className="text-xs font-bold text-primary-text truncate">
                                                         {item.label}
                                                     </p>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleToggleActive(item.id, item.is_active)}
-                                                            className={`px-2 py-0.5 rounded text-[10px] font-mono inline-flex items-center gap-1 border ${item.is_active
-                                                                    ? 'bg-accent text-accent-foreground border-accent font-semibold'
-                                                                    : 'bg-surface text-secondary-text border-border-subtle hover:text-accent'
-                                                                }`}
-                                                        >
-                                                            {item.is_active ? <Eye size={10} /> : <EyeOff size={10} />}
-                                                            <span>{item.is_active ? 'Active' : 'Hidden'}</span>
-                                                        </button>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-mono text-secondary-text">
+                                                            {item.media_type === 'image' ? 'Image • 2s' : 'Video • Full length'}
+                                                        </span>
 
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDelete(item.id)}
-                                                            title="Delete"
+                                                            title="Remove from loop"
                                                             className="p-1 rounded bg-surface border border-border-subtle text-secondary-text hover:text-red-400"
                                                         >
                                                             <Trash2 size={12} />
@@ -355,17 +378,16 @@ export function HeroBackgroundControl({
                             >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="text-xs font-mono text-accent uppercase tracking-wider flex items-center gap-1.5">
-                                        <Plus size={14} /> Add Background Media
+                                        <Plus size={14} /> Add to Loop
                                     </span>
 
-                                    {/* 3-Way Source Switcher: Upload / Link / Choose from Media Library */}
                                     <div className="inline-flex rounded-lg bg-surface border border-border-subtle p-0.5 text-[11px] font-mono">
                                         <button
                                             type="button"
                                             onClick={() => setSourceMode('upload')}
                                             className={`px-2.5 py-1 rounded-md flex items-center gap-1 ${sourceMode === 'upload'
-                                                    ? 'bg-accent text-accent-foreground font-semibold'
-                                                    : 'text-secondary-text'
+                                                ? 'bg-accent text-accent-foreground font-semibold'
+                                                : 'text-secondary-text'
                                                 }`}
                                         >
                                             <Upload size={11} /> Upload
@@ -374,8 +396,8 @@ export function HeroBackgroundControl({
                                             type="button"
                                             onClick={() => setSourceMode('link')}
                                             className={`px-2.5 py-1 rounded-md flex items-center gap-1 ${sourceMode === 'link'
-                                                    ? 'bg-accent text-accent-foreground font-semibold'
-                                                    : 'text-secondary-text'
+                                                ? 'bg-accent text-accent-foreground font-semibold'
+                                                : 'text-secondary-text'
                                                 }`}
                                         >
                                             <LinkIcon size={11} /> External Link
@@ -384,8 +406,8 @@ export function HeroBackgroundControl({
                                             type="button"
                                             onClick={() => setSourceMode('library')}
                                             className={`px-2.5 py-1 rounded-md flex items-center gap-1 ${sourceMode === 'library'
-                                                    ? 'bg-accent text-accent-foreground font-semibold'
-                                                    : 'text-secondary-text'
+                                                ? 'bg-accent text-accent-foreground font-semibold'
+                                                : 'text-secondary-text'
                                                 }`}
                                         >
                                             <FolderOpen size={11} /> From Media Library
@@ -393,11 +415,10 @@ export function HeroBackgroundControl({
                                     </div>
                                 </div>
 
-                                {/* Mode 3: Choose from Existing Portfolio Media Library */}
                                 {sourceMode === 'library' && (
                                     <div className="space-y-2">
                                         <p className="text-[11px] font-mono text-secondary-text">
-                                            Click any existing image or video from your portfolio to use as Hero Background:
+                                            Select any image or video from your Media Library:
                                         </p>
                                         {libraryItems.length === 0 ? (
                                             <p className="p-3 bg-surface rounded-lg text-xs text-secondary-text text-center">
@@ -411,8 +432,8 @@ export function HeroBackgroundControl({
                                                         type="button"
                                                         onClick={() => selectFromLibrary(item)}
                                                         className={`p-2 rounded-lg border text-left transition-all ${urlInput === item.url
-                                                                ? 'border-accent bg-accent/10'
-                                                                : 'border-border-subtle bg-surface hover:border-accent/40'
+                                                            ? 'border-accent bg-accent/10'
+                                                            : 'border-border-subtle bg-surface hover:border-accent/40'
                                                             }`}
                                                     >
                                                         <div className="h-16 rounded overflow-hidden bg-background mb-1.5 flex items-center justify-center">
@@ -460,21 +481,21 @@ export function HeroBackgroundControl({
                                                 type="button"
                                                 onClick={() => setMediaType('image')}
                                                 className={`py-2 px-3 rounded-lg border text-xs font-mono flex items-center justify-center gap-1.5 ${mediaType === 'image'
-                                                        ? 'bg-accent/15 border-accent text-accent'
-                                                        : 'bg-surface border-border-subtle text-secondary-text'
+                                                    ? 'bg-accent/15 border-accent text-accent'
+                                                    : 'bg-surface border-border-subtle text-secondary-text'
                                                     }`}
                                             >
-                                                <ImageIcon size={13} /> Image
+                                                <ImageIcon size={13} /> Image (2s)
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setMediaType('video')}
                                                 className={`py-2 px-3 rounded-lg border text-xs font-mono flex items-center justify-center gap-1.5 ${mediaType === 'video'
-                                                        ? 'bg-accent/15 border-accent text-accent'
-                                                        : 'bg-surface border-border-subtle text-secondary-text'
+                                                    ? 'bg-accent/15 border-accent text-accent'
+                                                    : 'bg-surface border-border-subtle text-secondary-text'
                                                     }`}
                                             >
-                                                <Film size={13} /> Video
+                                                <Film size={13} /> Video (Full)
                                             </button>
                                         </div>
                                         <input type="hidden" name="mediaType" value={mediaType} />
@@ -521,24 +542,14 @@ export function HeroBackgroundControl({
                                     <input type="hidden" name="url" value={urlInput} />
                                 )}
 
-                                <div className="flex items-center justify-between pt-1">
-                                    <label className="flex items-center gap-2 text-xs text-primary-text cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            name="setActive"
-                                            defaultChecked
-                                            className="accent-[#C4F269]"
-                                        />
-                                        <span>Show on homepage immediately</span>
-                                    </label>
-
+                                <div className="flex justify-end pt-1">
                                     <Button
                                         type="submit"
                                         variant="accent"
                                         size="sm"
                                         disabled={saving || uploading || !urlInput}
                                     >
-                                        {saving ? 'Saving...' : 'Add to Hero Background'}
+                                        {saving ? 'Adding...' : 'Add to Loop'}
                                     </Button>
                                 </div>
                             </form>
