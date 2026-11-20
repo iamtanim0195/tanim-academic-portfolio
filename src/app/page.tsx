@@ -41,7 +41,7 @@ export default function HomePage() {
               <div className="flex flex-wrap items-center gap-4 pt-2">
                 <Link href="/projects">
                   <Button variant="accent" size="lg" className="gap-2">
-                    <span>Explore My Research</span>
+                    <span>Explore My Projects</span>
                     <ArrowRight size={18} />
                   </Button>
                 </Link>

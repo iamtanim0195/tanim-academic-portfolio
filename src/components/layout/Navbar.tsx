@@ -10,11 +10,10 @@ import { NavItem } from '@/types';
 const defaultNavItems: NavItem[] = [
     { id: '1', label: 'Home', href: '/', order: 1, isEnabled: true },
     { id: '2', label: 'About', href: '/about', order: 2, isEnabled: true },
-    { id: '3', label: 'Research', href: '/research', order: 3, isEnabled: true },
-    { id: '4', label: 'Projects', href: '/projects', order: 4, isEnabled: true },
-    { id: '5', label: 'Publications', href: '/publications', order: 5, isEnabled: true },
-    { id: '6', label: 'Feed', href: '/feed', order: 6, isEnabled: true },
-    { id: '7', label: 'Contact', href: '/contact', order: 7, isEnabled: true },
+    { id: '3', label: 'Projects', href: '/projects', order: 4, isEnabled: true },
+    { id: '4', label: 'Publications', href: '/publications', order: 5, isEnabled: true },
+    { id: '5', label: 'Feed', href: '/feed', order: 6, isEnabled: true },
+    { id: '6', label: 'Contact', href: '/contact', order: 7, isEnabled: true },
 ];
 
 export function Navbar() {

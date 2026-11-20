@@ -47,3 +47,16 @@ export const publicationSchema = z.object({
     isFeatured: z.boolean().default(false),
     published: z.boolean().default(true),
 });
+
+export const feedPostSchema = z.object({
+    caption: z.string().min(1, 'Caption cannot be empty').max(3000, 'Caption is too long'),
+    imageUrl: z.string().optional().default(''),
+    published: z.boolean().default(true),
+});
+
+export const commentSchema = z.object({
+    activityId: z.string().uuid('Invalid post ID'),
+    authorName: z.string().min(1, 'Name is required').max(80, 'Name is too long'),
+    content: z.string().min(1, 'Comment cannot be empty').max(1000, 'Comment is too long'),
+    honeypot: z.string().max(0, 'Spam detected').optional().default(''),
+});
