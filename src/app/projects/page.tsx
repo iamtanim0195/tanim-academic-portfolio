@@ -15,6 +15,8 @@ import { LiveDemoPreview } from '@/components/ui/LiveDemoPreview';
 import { ProjectThumbnail } from '@/components/projects/ProjectThumbnail';
 
 
+export const instant = false;
+
 export default async function ProjectsPage() {
     const admin = await isAdminUser();
     const supabase = await createServerSupabaseClient();

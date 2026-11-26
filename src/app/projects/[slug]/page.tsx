@@ -11,6 +11,8 @@ import { DeleteProjectButton } from '@/components/admin/DeleteProjectButton';
 import { ArrowLeft, ExternalLink, Pencil } from 'lucide-react';
 import { FaGithub as Github } from "react-icons/fa";
 
+export const instant = false;
+
 interface ProjectDetailPageProps {
     params: Promise<{ slug: string }>;
 }

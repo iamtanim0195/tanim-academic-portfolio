@@ -6,6 +6,8 @@ import { SectionHeading } from '@/components/ui/SectionHeading';
 import { FeedPostComposer } from '@/components/feed/FeedPostComposer';
 import { FeedPostCard, FeedPost } from '@/components/feed/FeedPostCard';
 
+export const instant = false;
+
 export default async function FeedPage() {
     const admin = await isAdminUser();
     const supabase = await createServerSupabaseClient();

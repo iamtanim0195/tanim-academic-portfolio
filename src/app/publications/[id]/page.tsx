@@ -6,6 +6,8 @@ import { Container } from '@/components/ui/Container';
 import { PublicationForm } from '@/components/admin/PublicationForm';
 import { ArrowLeft } from 'lucide-react';
 
+export const instant = false;
+
 interface EditPublicationPageProps {
     params: Promise<{ id: string }>;
 }

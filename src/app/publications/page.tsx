@@ -9,6 +9,8 @@ import { StatusBadge } from '@/components/admin/StatusBadge';
 import { DeletePublicationButton } from '@/components/admin/DeletePublicationButton';
 import { Plus, Pencil, ExternalLink, BookOpen } from 'lucide-react';
 
+export const instant = false;
+
 export default async function PublicationsPage() {
     const admin = await isAdminUser();
     const supabase = await createServerSupabaseClient();

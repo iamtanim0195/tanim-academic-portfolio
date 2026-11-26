@@ -115,6 +115,21 @@ export async function updateProjectAction(id: string, formData: FormData) {
     return { success: true };
 }
 
+export async function toggleProjectPublishAction(id: string, published: boolean) {
+    const supabase = await verifyAdmin();
+    const { error } = await supabase
+        .from('projects')
+        .update({ published: !published, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+    if (error) return { error: error.message };
+
+    revalidatePath('/projects');
+    revalidatePath('/');
+    revalidatePath('/admin/projects');
+    return { success: true };
+}
+
 export async function deleteProjectAction(id: string) {
     const supabase = await verifyAdmin();
     const { error } = await supabase.from('projects').delete().eq('id', id);
